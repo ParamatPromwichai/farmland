@@ -14,6 +14,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_FILE = os.path.join(BASE_DIR, "server_save.json")
 
 class FarmServerHandler(SimpleHTTPRequestHandler):
+    extensions_map = SimpleHTTPRequestHandler.extensions_map.copy()
+    extensions_map.update({
+        '.json': 'application/json',
+        '.webmanifest': 'application/manifest+json',
+        '.js': 'application/javascript',
+        '.ico': 'image/x-icon',
+        '.png': 'image/png',
+        '.svg': 'image/svg+xml',
+    })
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
 

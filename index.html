@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cozy Hay Farm 3D - Mobile & Touch Edition</title>
+    <!-- PWA & Mobile Web App Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#5c3109">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hay Farm 3D">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=Kanit:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -195,6 +206,12 @@
                 <button onclick="openDbModal()" class="btn-3d flex items-center bg-[#4d270b]/90 backdrop-blur-sm border-2 border-[#deb07c] hover:border-[#ffe066] rounded-full h-8 sm:h-9 px-2.5 sm:px-3 shadow-lg pointer-events-auto cursor-pointer gap-1.5" title="คลิกเพื่อจัดการฐานข้อมูลฟาร์ม">
                     <div id="hudDbIcon" class="w-4 h-4 sm:w-5 sm:h-5 drop-shadow"></div>
                     <span id="hudDbText" class="text-[#69db7c] font-extrabold text-[10px] sm:text-xs text-outline-sm whitespace-nowrap">💾 บันทึกแล้ว</span>
+                </button>
+
+                <!-- PWA Install App Button -->
+                <button id="pwaInstallBtn" onclick="installPWA()" class="hidden btn-3d flex items-center bg-gradient-to-r from-[#fab005] to-[#f08c00] border-2 border-white rounded-full h-8 sm:h-9 px-2.5 sm:px-3.5 shadow-lg pointer-events-auto cursor-pointer gap-1.5 animate-pulse-glow" title="ติดตั้งเกมลงบนเครื่องเป็นแอปพลิเคชัน">
+                    <span class="text-xs sm:text-sm">📲</span>
+                    <span class="text-white font-extrabold text-[10px] sm:text-xs text-outline-sm whitespace-nowrap">ติดตั้งแอป</span>
                 </button>
             </div>
 
@@ -753,6 +770,11 @@
                         <input type="file" accept=".json" onchange="if(this.files[0]) importGameData(this.files[0])" class="hidden" />
                     </label>
                 </div>
+
+                <button id="dbModalInstallBtn" onclick="installPWA()" class="btn-3d w-full py-2 px-3 rounded-2xl bg-gradient-to-r from-[#fab005] to-[#f08c00] border-2 border-white text-white font-extrabold text-xs sm:text-sm text-outline-sm flex items-center justify-center gap-2 shadow-lg">
+                    <span>📲</span>
+                    <span>ติดตั้งเกม Cozy Hay Farm 3D ลงในเครื่อง (PWA)</span>
+                </button>
 
                 <div class="pt-2 border-t border-[#8c5527] flex justify-between items-center">
                     <span class="text-[11px] text-[#ffe8cc]/70">ต้องการล้างข้อมูลเพื่อเริ่มเกาะใหม่?</span>
@@ -6727,6 +6749,63 @@
                 saveGameData(true);
             }
         });
+
+        // ==========================================
+        // PWA SERVICE WORKER & APP INSTALL PROMPT
+        // ==========================================
+        let deferredInstallPrompt = null;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => {
+                        console.log('✅ PWA ServiceWorker Registered:', reg.scope);
+                    })
+                    .catch(err => {
+                        console.warn('PWA ServiceWorker registration notice:', err);
+                    });
+            });
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            const pwaBtn = document.getElementById('pwaInstallBtn');
+            if (pwaBtn) pwaBtn.classList.remove('hidden');
+            const dbBtn = document.getElementById('dbModalInstallBtn');
+            if (dbBtn) dbBtn.classList.remove('hidden');
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredInstallPrompt = null;
+            const pwaBtn = document.getElementById('pwaInstallBtn');
+            if (pwaBtn) pwaBtn.classList.add('hidden');
+            const dbBtn = document.getElementById('dbModalInstallBtn');
+            if (dbBtn) dbBtn.classList.add('hidden');
+            showBanner('🎉 ติดตั้งแอป Cozy Hay Farm 3D ลงในเครื่องเรียบร้อยแล้ว!');
+        });
+
+        async function installPWA() {
+            if (deferredInstallPrompt) {
+                deferredInstallPrompt.prompt();
+                const { outcome } = await deferredInstallPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    showBanner('🎉 กำลังติดตั้งแอป Cozy Hay Farm 3D...');
+                }
+                deferredInstallPrompt = null;
+                const pwaBtn = document.getElementById('pwaInstallBtn');
+                if (pwaBtn) pwaBtn.classList.add('hidden');
+                const dbBtn = document.getElementById('dbModalInstallBtn');
+                if (dbBtn) dbBtn.classList.add('hidden');
+            } else {
+                const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+                if (isIos) {
+                    showBanner('📲 บน iPhone/iPad: แตะปุ่ม Share (แชร์) ด้านล่าง แล้วเลือก "Add to Home Screen" (เพิ่มไปยังหน้าจอโฮม)');
+                } else {
+                    showBanner('💡 สำหรับเบราว์เซอร์นี้: คุณสามารถแตะเมนู 3 จุด แล้วเลือก "Install App" หรือ "เพิ่มไปยังหน้าจอหลัก"');
+                }
+            }
+        }
 
         window.onload = function () {
             initStaticIcons();

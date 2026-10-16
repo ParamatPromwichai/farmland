@@ -1,0 +1,29 @@
+{
+  "name": "Cozy Hay Farm 3D - Mobile & Touch Edition",
+  "short_name": "Hay Farm 3D",
+  "description": "เกมทำฟาร์ม 3 มิติสุดน่ารัก ปลูกผัก เลี้ยงสัตว์ อบขนมปัง ส่งของ และสร้างฟาร์มในฝัน",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a78a8",
+  "theme_color": "#5c3109",
+  "categories": [
+    "games",
+    "simulation"
+  ],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
