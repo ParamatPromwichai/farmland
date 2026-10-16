@@ -1,0 +1,293 @@
+{
+  "version": 4,
+  "savedAt": 1792181871028,
+  "level": 1,
+  "xp": 0,
+  "coins": 350,
+  "gems": 15,
+  "inventory": {
+    "wheat": 6,
+    "corn": 4,
+    "tomato": 0,
+    "pumpkin": 0,
+    "carrot": 0,
+    "strawberry": 0,
+    "milk": 0,
+    "egg": 0,
+    "wool": 0,
+    "bacon": 0,
+    "bread": 1,
+    "cow_feed": 0,
+    "chicken_feed": 0,
+    "sheep_feed": 0,
+    "pig_feed": 0
+  },
+  "buildings": {
+    "house": {
+      "id": "house",
+      "name": "บ้านชาวไร่",
+      "type": "house",
+      "x": 0,
+      "z": -6,
+      "rot": 0,
+      "w": 6,
+      "d": 5
+    },
+    "barn": {
+      "id": "barn",
+      "name": "โรงนาสีแดง",
+      "type": "barn",
+      "x": -8.5,
+      "z": -5.5,
+      "rot": 0,
+      "w": 5,
+      "d": 4.5
+    },
+    "windmill": {
+      "id": "windmill",
+      "name": "กังหันลม",
+      "type": "windmill",
+      "x": -4.5,
+      "z": -7,
+      "rot": 0,
+      "w": 3,
+      "d": 3
+    },
+    "bakery": {
+      "id": "bakery",
+      "name": "เตาอบเบเกอรี่",
+      "type": "bakery",
+      "x": 8,
+      "z": -2,
+      "rot": 0,
+      "w": 4,
+      "d": 3.5
+    },
+    "truck": {
+      "id": "truck",
+      "name": "รถส่งของและบอร์ด",
+      "type": "truck",
+      "x": 6,
+      "z": 5.5,
+      "rot": 0,
+      "w": 4,
+      "d": 3.5
+    },
+    "shop": {
+      "id": "shop",
+      "name": "ร้านค้าฟาร์มริมทาง",
+      "type": "shop",
+      "x": 7.5,
+      "z": 2,
+      "rot": 0,
+      "w": 4.5,
+      "d": 3.5
+    },
+    "plots_field": {
+      "id": "plots_field",
+      "name": "แปลงพืชผัก (12 แปลง)",
+      "type": "plots_field",
+      "x": -6.5,
+      "z": 5,
+      "rot": 0,
+      "w": 8,
+      "d": 6
+    }
+  },
+  "pens": {},
+  "animals": [],
+  "expansions": {
+    "east_meadow": {
+      "id": "east_meadow",
+      "unlocked": false
+    },
+    "west_pasture": {
+      "id": "west_pasture",
+      "unlocked": false
+    },
+    "north_river": {
+      "id": "north_river",
+      "unlocked": false
+    },
+    "south_orchard": {
+      "id": "south_orchard",
+      "unlocked": false
+    }
+  },
+  "plots": [
+    {
+      "index": 0,
+      "state": "ready",
+      "cropType": "wheat",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 1,
+      "state": "ready",
+      "cropType": "corn",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 2,
+      "state": "ready",
+      "cropType": "tomato",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 3,
+      "state": "ready",
+      "cropType": "pumpkin",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 4,
+      "state": "ready",
+      "cropType": "wheat",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 5,
+      "state": "ready",
+      "cropType": "corn",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 6,
+      "state": "ready",
+      "cropType": "tomato",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 7,
+      "state": "ready",
+      "cropType": "pumpkin",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 8,
+      "state": "ready",
+      "cropType": "wheat",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 9,
+      "state": "ready",
+      "cropType": "corn",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 10,
+      "state": "ready",
+      "cropType": "tomato",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    },
+    {
+      "index": 11,
+      "state": "ready",
+      "cropType": "pumpkin",
+      "progress": 100,
+      "plantedAt": 0,
+      "readyAt": 0,
+      "growDuration": 0
+    }
+  ],
+  "orders": [
+    {
+      "id": 1,
+      "item1": "wheat",
+      "qty1": 3,
+      "item2": "wheat",
+      "qty2": 0,
+      "coins": 45,
+      "xp": 15
+    },
+    {
+      "id": 2,
+      "item1": "corn",
+      "qty1": 2,
+      "item2": "corn",
+      "qty2": 0,
+      "coins": 50,
+      "xp": 18
+    },
+    {
+      "id": 3,
+      "item1": "wheat",
+      "qty1": 2,
+      "item2": "corn",
+      "qty2": 1,
+      "coins": 60,
+      "xp": 20
+    },
+    {
+      "id": 4,
+      "item1": "bread",
+      "qty1": 1,
+      "item2": "wheat",
+      "qty2": 2,
+      "coins": 85,
+      "xp": 25
+    },
+    {
+      "id": 5,
+      "item1": "corn",
+      "qty1": 3,
+      "item2": "wheat",
+      "qty2": 1,
+      "coins": 65,
+      "xp": 22
+    },
+    {
+      "id": 6,
+      "item1": "bread",
+      "qty1": 1,
+      "item2": "corn",
+      "qty2": 2,
+      "coins": 90,
+      "xp": 26
+    }
+  ],
+  "bakeryQueue": [
+    {
+      "name": "Bread",
+      "icon": "bread",
+      "secondsLeft": 30
+    }
+  ],
+  "hatColor": 16106818,
+  "outfitColor": 2395366,
+  "petType": "golden"
+}
