@@ -1,13 +1,13 @@
 {
   "version": 4,
-  "savedAt": 1792182590997,
-  "level": 1,
-  "xp": 0,
-  "coins": 350,
-  "gems": 15,
+  "savedAt": 1792182729567,
+  "level": 2,
+  "xp": 83,
+  "coins": 394,
+  "gems": 17,
   "inventory": {
     "wheat": 6,
-    "corn": 4,
+    "corn": 12,
     "tomato": 0,
     "pumpkin": 0,
     "carrot": 0,
@@ -37,8 +37,8 @@
       "id": "barn",
       "name": "โรงนาสีแดง",
       "type": "barn",
-      "x": -8.5,
-      "z": -5.5,
+      "x": -9.5,
+      "z": -1,
       "rot": 0,
       "w": 5,
       "d": 4.5
@@ -98,8 +98,7 @@
   "animals": [],
   "expansions": {
     "east_meadow": {
-      "id": "east_meadow",
-      "unlocked": false
+      "unlocked": true
     },
     "west_pasture": {
       "id": "west_pasture",
@@ -117,108 +116,108 @@
   "plots": [
     {
       "index": 0,
-      "state": "ready",
+      "state": "empty",
       "cropType": "wheat",
-      "progress": 100,
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 1,
-      "state": "ready",
+      "state": "empty",
       "cropType": "corn",
-      "progress": 100,
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 2,
-      "state": "ready",
-      "cropType": "tomato",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "wheat",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 3,
-      "state": "ready",
-      "cropType": "pumpkin",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "corn",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 4,
-      "state": "ready",
+      "state": "empty",
       "cropType": "wheat",
-      "progress": 100,
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 5,
-      "state": "ready",
+      "state": "empty",
       "cropType": "corn",
-      "progress": 100,
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 6,
-      "state": "ready",
-      "cropType": "tomato",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "wheat",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 7,
-      "state": "ready",
-      "cropType": "pumpkin",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "wheat",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 8,
-      "state": "ready",
+      "state": "empty",
       "cropType": "wheat",
-      "progress": 100,
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 9,
-      "state": "ready",
-      "cropType": "corn",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "wheat",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 10,
-      "state": "ready",
-      "cropType": "tomato",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "corn",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
     },
     {
       "index": 11,
-      "state": "ready",
-      "cropType": "pumpkin",
-      "progress": 100,
+      "state": "empty",
+      "cropType": "wheat",
+      "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
       "growDuration": 0
@@ -284,7 +283,28 @@
     {
       "name": "Bread",
       "icon": "bread",
-      "secondsLeft": 30
+      "secondsLeft": 30,
+      "totalTime": 30,
+      "finishTime": 1792180022817,
+      "startTime": 1792179992817
+    },
+    {
+      "id": "bake_1792179996618_6vxq",
+      "recipeId": "bread",
+      "name": "ขนมปังสดใหม่",
+      "icon": "bread",
+      "totalTime": 30,
+      "startTime": 1792179996618,
+      "finishTime": 1792180026618
+    },
+    {
+      "id": "bake_1792179998522_afno",
+      "recipeId": "bread",
+      "name": "ขนมปังสดใหม่",
+      "icon": "bread",
+      "totalTime": 30,
+      "startTime": 1792179998522,
+      "finishTime": 1792180028522
     }
   ],
   "hatColor": 16106818,
