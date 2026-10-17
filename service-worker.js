@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cozy-hay-farm-v1';
+const CACHE_NAME = 'cozy-hay-farm-v2';
 const CORE_ASSETS = [
     './',
     './index.html',
@@ -34,8 +34,8 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // Bypass API calls (never cache live server sync endpoints)
-    if (url.pathname.startsWith('/api/')) {
+    // Bypass API calls (never cache live server sync endpoints regardless of domain or subpath)
+    if (url.pathname.startsWith('/api/') || url.pathname.includes('/api/')) {
         return;
     }
 

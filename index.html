@@ -1273,11 +1273,77 @@
             pizza: 250
         };
 
-        /* ==================== DATABASE ENGINE (LocalStorage DB v4) ==================== */
-        /* ==================== DATABASE ENGINE (LocalStorage + Session + Server Disk) ==================== */
+        /* ==================== RESILIENT OFFLINE DATABASE ENGINE ==================== */
+        /* IndexedDB + LocalStorage + SessionStorage + Timeout-Guarded Server Sync */
         const DB_KEY = 'cozy_hay_farm_db_v4';
+        const IDB_NAME = 'CozyHayFarmDB';
+        const IDB_STORE = 'farmState';
 
+        let idbPromise = null;
+        function getIndexedDB() {
+            if (!idbPromise) {
+                idbPromise = new Promise((resolve) => {
+                    if (!window.indexedDB) return resolve(null);
+                    try {
+                        const req = indexedDB.open(IDB_NAME, 1);
+                        req.onupgradeneeded = (e) => {
+                            const db = e.target.result;
+                            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                                db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+                            }
+                        };
+                        req.onsuccess = (e) => resolve(e.target.result);
+                        req.onerror = () => resolve(null);
+                    } catch (e) {
+                        resolve(null);
+                    }
+                });
+            }
+            return idbPromise;
+        }
+
+        async function saveToIndexedDB(payload) {
+            try {
+                const db = await getIndexedDB();
+                if (!db) return;
+                const tx = db.transaction(IDB_STORE, 'readwrite');
+                tx.objectStore(IDB_STORE).put({ id: 'primarySave', data: payload, savedAt: Date.now() });
+            } catch (e) {}
+        }
+
+        async function loadFromIndexedDB() {
+            try {
+                const db = await getIndexedDB();
+                if (!db) return null;
+                return new Promise((resolve) => {
+                    const tx = db.transaction(IDB_STORE, 'readonly');
+                    const req = tx.objectStore(IDB_STORE).get('primarySave');
+                    req.onsuccess = () => resolve(req.result ? req.result.data : null);
+                    req.onerror = () => resolve(null);
+                });
+            } catch (e) {
+                return null;
+            }
+        }
+
+        let _lastKnownPlots = null;
         function buildGamePayload() {
+            let plotsPayload = [];
+            if (plotsData && plotsData.length > 0) {
+                plotsPayload = plotsData.map(p => ({
+                    index: p.index,
+                    state: p.state,
+                    cropType: p.cropType,
+                    progress: p.progress || 0,
+                    plantedAt: p.plantedAt || 0,
+                    readyAt: p.readyAt || 0,
+                    growDuration: p.growDuration || 0
+                }));
+                _lastKnownPlots = plotsPayload;
+            } else if (_lastKnownPlots) {
+                plotsPayload = _lastKnownPlots;
+            }
+
             return {
                 version: 4,
                 savedAt: Date.now(),
@@ -1290,15 +1356,7 @@
                 pens: state.pens,
                 animals: state.animals,
                 expansions: state.expansions,
-                plots: plotsData.map(p => ({
-                    index: p.index,
-                    state: p.state,
-                    cropType: p.cropType,
-                    progress: p.progress || 0,
-                    plantedAt: p.plantedAt || 0,
-                    readyAt: p.readyAt || 0,
-                    growDuration: p.growDuration || 0
-                })),
+                plots: plotsPayload,
                 orders: state.orders,
                 bakeryQueue: state.bakeryQueue,
                 hatColor: state.hatColor,
@@ -1307,31 +1365,51 @@
             };
         }
 
+        let isSavingToServer = false;
         function saveGameData(isUnloading = false) {
             try {
                 const payload = buildGamePayload();
                 const json = JSON.stringify(payload);
 
-                // 1. LocalStorage (Permanent browser storage)
-                localStorage.setItem(DB_KEY, json);
+                // 1. LocalStorage (Primary synchronous browser storage)
+                try {
+                    localStorage.setItem(DB_KEY, json);
+                } catch (e) {
+                    console.warn('LocalStorage save failed:', e);
+                }
 
                 // 2. SessionStorage (Active browser session redundancy)
-                sessionStorage.setItem(DB_KEY, json);
+                try {
+                    sessionStorage.setItem(DB_KEY, json);
+                } catch (e) {}
 
-                // 3. Server Disk (/api/save)
+                // 3. Resilient IndexedDB (Persistent across mobile / PWA / WebClip)
+                saveToIndexedDB(payload);
+
+                // 4. Server Disk (/api/save) with timeout and concurrency guard
                 if (isUnloading && navigator.sendBeacon) {
                     try {
                         const blob = new Blob([json], { type: 'application/json' });
                         navigator.sendBeacon('/api/save', blob);
                     } catch(e) {}
-                } else {
+                } else if (!isSavingToServer) {
+                    isSavingToServer = true;
+                    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                    const timeoutId = controller ? setTimeout(() => controller.abort(), 4000) : null;
+
                     fetch('/api/save', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: json
-                    }).then(r => r.json()).then(res => {
-                        updateServerIndicator(true);
+                        body: json,
+                        signal: controller ? controller.signal : undefined
+                    }).then(r => {
+                        if (timeoutId) clearTimeout(timeoutId);
+                        isSavingToServer = false;
+                        if (r.ok) updateServerIndicator(true);
+                        else updateServerIndicator(false);
                     }).catch(() => {
+                        if (timeoutId) clearTimeout(timeoutId);
+                        isSavingToServer = false;
                         updateServerIndicator(false);
                     });
                 }
@@ -1350,23 +1428,39 @@
             if (data.coins !== undefined) state.coins = data.coins;
             if (data.gems !== undefined) state.gems = data.gems;
             if (data.inventory) state.inventory = { ...state.inventory, ...data.inventory };
+
+            // Apply building coordinates & 3D object positions
             if (data.buildings) {
                 state.buildings = { ...state.buildings, ...data.buildings };
                 Object.keys(state.buildings).forEach(bId => {
                     const b = state.buildings[bId];
-                    if (b && typeof b.rot === 'number') {
-                        if (Math.abs(b.rot - (-Math.PI / 4)) < 0.05 || Math.abs(b.rot % (Math.PI / 2)) > 0.05) {
-                            b.rot = 0;
-                        }
-                        if (typeof farmEntities !== 'undefined' && farmEntities[bId] && farmEntities[bId].group) {
-                            farmEntities[bId].group.rotation.y = b.rot;
-                            if (typeof b.x === 'number') farmEntities[bId].group.position.x = b.x;
-                            if (typeof b.z === 'number') farmEntities[bId].group.position.z = b.z;
+                    if (b) {
+                        const ent = (typeof farmEntities !== 'undefined') ? farmEntities[bId] : null;
+                        if (ent && ent.group) {
+                            if (typeof b.x === 'number') ent.group.position.x = b.x;
+                            if (typeof b.z === 'number') ent.group.position.z = b.z;
+                            if (typeof b.rot === 'number') ent.group.rotation.y = b.rot;
                         }
                     }
                 });
             }
-            if (data.pens) state.pens = data.pens;
+
+            // Apply pen coordinates & 3D object positions
+            if (data.pens) {
+                state.pens = { ...state.pens, ...data.pens };
+                Object.keys(state.pens).forEach(penId => {
+                    const p = state.pens[penId];
+                    if (p) {
+                        const ent = (typeof farmEntities !== 'undefined') ? farmEntities[penId] : null;
+                        if (ent && ent.group) {
+                            if (typeof p.x === 'number') ent.group.position.x = p.x;
+                            if (typeof p.z === 'number') ent.group.position.z = p.z;
+                            if (typeof p.rot === 'number') ent.group.rotation.y = p.rot || 0;
+                        }
+                    }
+                });
+            }
+
             if (data.animals && Array.isArray(data.animals)) state.animals = data.animals;
             if (data.expansions) state.expansions = { ...state.expansions, ...data.expansions };
             if (data.orders) state.orders = data.orders;
@@ -1375,25 +1469,28 @@
             if (data.outfitColor) state.outfitColor = data.outfitColor;
             if (data.petType) state.petType = data.petType;
 
-            if (data.plots && Array.isArray(data.plots) && plotsData.length > 0) {
-                const now = Date.now();
-                data.plots.forEach((sp, i) => {
-                    if (plotsData[i]) {
-                        plotsData[i].cropType = sp.cropType || 'wheat';
-                        plotsData[i].plantedAt = sp.plantedAt || 0;
-                        plotsData[i].readyAt = sp.readyAt || 0;
-                        plotsData[i].growDuration = sp.growDuration || 0;
+            if (data.plots && Array.isArray(data.plots)) {
+                _lastKnownPlots = data.plots;
+                if (plotsData && plotsData.length > 0) {
+                    const now = Date.now();
+                    data.plots.forEach((sp, i) => {
+                        if (plotsData[i]) {
+                            plotsData[i].cropType = sp.cropType || 'wheat';
+                            plotsData[i].plantedAt = sp.plantedAt || 0;
+                            plotsData[i].readyAt = sp.readyAt || 0;
+                            plotsData[i].growDuration = sp.growDuration || 0;
 
-                        if (sp.state === 'growing' && sp.readyAt && now >= sp.readyAt) {
-                            plotsData[i].state = 'ready';
-                            plotsData[i].progress = 100;
-                        } else {
-                            plotsData[i].state = sp.state;
-                            plotsData[i].progress = sp.progress || 0;
+                            if (sp.state === 'growing' && sp.readyAt && now >= sp.readyAt) {
+                                plotsData[i].state = 'ready';
+                                plotsData[i].progress = 100;
+                            } else {
+                                plotsData[i].state = sp.state;
+                                plotsData[i].progress = sp.progress || 0;
+                            }
+                            rebuildPlotVisual(plotsData[i]);
                         }
-                        rebuildPlotVisual(plotsData[i]);
-                    }
-                });
+                    });
+                }
             }
 
             if (typeof scene !== 'undefined' && scene) {
@@ -1407,24 +1504,38 @@
             return true;
         }
 
-        function loadGameData() {
+        async function loadGameData() {
             try {
-                // Clear obsolete DB keys so fresh player gets clean crop-only farm
+                // Clear obsolete DB keys
                 ['cozy_hay_farm_db_v3', 'cozy_hay_farm_db_v2', 'cozy_hay_farm_db_v1'].forEach(k => {
                     if (localStorage.getItem(k)) localStorage.removeItem(k);
                 });
 
-                // Load from LocalStorage or SessionStorage immediately
+                // Load from LocalStorage or SessionStorage
                 let raw = localStorage.getItem(DB_KEY);
                 if (!raw) raw = sessionStorage.getItem(DB_KEY);
+                let loadedData = null;
                 if (raw) {
-                    const data = JSON.parse(raw);
-                    applyGamePayload(data);
+                    try { loadedData = JSON.parse(raw); } catch(e){}
                 }
 
-                // Sync with server disk in background
+                // Resilient fallback to IndexedDB if LocalStorage was cleared
+                if (!loadedData) {
+                    loadedData = await loadFromIndexedDB();
+                    if (loadedData) {
+                        try {
+                            localStorage.setItem(DB_KEY, JSON.stringify(loadedData));
+                        } catch(e){}
+                    }
+                }
+
+                if (loadedData) {
+                    applyGamePayload(loadedData);
+                }
+
+                // Sync with server disk in background (progress-protected)
                 syncWithServerSave();
-                return !!raw;
+                return !!loadedData;
             } catch (e) {
                 console.error('Error loading game data from DB:', e);
                 return false;
@@ -1433,28 +1544,59 @@
 
         async function syncWithServerSave() {
             try {
-                const res = await fetch('/api/load');
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timeoutId = controller ? setTimeout(() => controller.abort(), 4000) : null;
+
+                const res = await fetch('/api/load', {
+                    signal: controller ? controller.signal : undefined
+                });
+                if (timeoutId) clearTimeout(timeoutId);
+
                 if (!res.ok) {
                     updateServerIndicator(false);
                     return;
                 }
                 const serverData = await res.json();
                 if (serverData && serverData.version && serverData.savedAt) {
-                    const localRaw = localStorage.getItem(DB_KEY);
-                    let localSavedAt = 0;
+                    const localRaw = localStorage.getItem(DB_KEY) || sessionStorage.getItem(DB_KEY);
+                    let localData = null;
                     if (localRaw) {
-                        try { localSavedAt = JSON.parse(localRaw).savedAt || 0; } catch(e){}
+                        try { localData = JSON.parse(localRaw); } catch(e){}
                     }
 
-                    if (!localRaw || serverData.savedAt > localSavedAt) {
-                        console.log('Server save is newer. Syncing from server disk...');
+                    let shouldApplyServer = false;
+                    if (!localData || !localData.savedAt) {
+                        shouldApplyServer = true;
+                    } else {
+                        // Protect local player progress:
+                        // Compare pens count, level, xp, and timestamp
+                        const localLevel = localData.level || 1;
+                        const serverLevel = serverData.level || 1;
+                        const localPens = Object.keys(localData.pens || {}).length;
+                        const serverPens = Object.keys(serverData.pens || {}).length;
+                        const localAnimals = Array.isArray(localData.animals) ? localData.animals.length : 0;
+                        const serverAnimals = Array.isArray(serverData.animals) ? serverData.animals.length : 0;
+                        const localTime = localData.savedAt || 0;
+                        const serverTime = serverData.savedAt || 0;
+
+                        // If local player has more pens/animals or higher level, NEVER overwrite with default server save!
+                        if (localPens > serverPens || localAnimals > serverAnimals || localLevel > serverLevel) {
+                            shouldApplyServer = false;
+                        } else if (serverPens > localPens || serverAnimals > localAnimals || serverLevel > localLevel) {
+                            shouldApplyServer = true;
+                        } else if (serverTime > localTime) {
+                            shouldApplyServer = true;
+                        }
+                    }
+
+                    if (shouldApplyServer) {
+                        console.log('Server save has verified newer/better progress. Syncing from server...');
                         applyGamePayload(serverData);
-                        localStorage.setItem(DB_KEY, JSON.stringify(serverData));
-                        sessionStorage.setItem(DB_KEY, JSON.stringify(serverData));
-                        if (typeof buildLandExpansions3D === 'function') buildLandExpansions3D();
-                        if (typeof buildLivestockZone === 'function') buildLivestockZone();
-                        if (typeof refreshPen3dLabels === 'function') refreshPen3dLabels();
-                    } else if (localSavedAt > serverData.savedAt) {
+                        try { localStorage.setItem(DB_KEY, JSON.stringify(serverData)); } catch(e){}
+                        try { sessionStorage.setItem(DB_KEY, JSON.stringify(serverData)); } catch(e){}
+                        saveToIndexedDB(serverData);
+                    } else {
+                        // Local progress is ahead or equal: push local data to server disk
                         saveGameData(false);
                     }
                     updateServerIndicator(true);
@@ -1464,7 +1606,7 @@
                     updateServerIndicator(true);
                 }
             } catch (e) {
-                console.warn('Server sync error:', e);
+                // Offline or timeout: completely normal for standalone PWA
                 updateServerIndicator(false);
             }
         }
@@ -3221,13 +3363,16 @@
         }
 
         function exitEditMode() {
+            if (state.selectedMovableId) {
+                confirmPlacement();
+            }
             state.editLayoutMode = false;
-            cancelPlacement();
             if (farmGridMesh) farmGridMesh.visible = false;
+            if (placementCursorMesh) placementCursorMesh.visible = false;
             document.getElementById('editLayoutToolbar').classList.add('hidden');
             const rightBtn = document.getElementById('rightBtnEditLayout');
             if (rightBtn) rightBtn.classList.remove('animate-pulse-glow');
-            showBanner('✅ ออกจากโหมดจัดผังฟาร์มแล้ว');
+            showBanner('✅ บันทึกผังฟาร์มเรียบร้อยแล้ว');
             saveGameData();
             updatePen3dLabels();
         }
@@ -3372,6 +3517,8 @@
             createPen3dLabels();
         }
 
+        const _sharedLabelVec = new THREE.Vector3();
+
         function updatePen3dLabels() {
             pen3dLabels.forEach(item => {
                 const pen = state.pens[item.penId];
@@ -3387,34 +3534,37 @@
 
                 const info = getPenCapacityInfo(pen.id);
                 const isEdit = state.editLayoutMode;
+                const cacheKey = `${isEdit}_${info.count}_${info.capacity}_${pen.name}`;
 
-                if (isEdit) {
-                    item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-amber-500 to-orange-600 border-2 border-white text-white font-extrabold text-[11px] sm:text-xs px-3 py-1 rounded-full text-outline-sm whitespace-nowrap shadow-xl z-20 animate-pulse';
-                    item.el.innerHTML = `🏗️ แตะย้าย ${pen.name}`;
-                } else {
-                    const isFull = info.isFull;
-                    const bgClass = isFull 
-                        ? 'bg-gradient-to-r from-red-600 to-rose-700 border-2 border-white' 
-                        : 'bg-gradient-to-r from-[#2f9e44] to-[#2b8a3e] border-2 border-[#d3f9d8]';
-                    item.el.className = `btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 ${bgClass} text-white font-extrabold text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-xl z-20`;
-                    item.el.innerHTML = `
-                        <span>${pen.name} (${info.count}/${info.capacity})</span>
-                        <button onclick="event.stopPropagation(); upgradePenCapacity('${pen.id}')" class="ml-1 bg-yellow-400 hover:bg-yellow-300 text-amber-950 px-1.5 py-0.2 rounded-md text-[10px] font-black shadow">ขยาย</button>
-                    `;
+                if (item.lastCacheKey !== cacheKey) {
+                    item.lastCacheKey = cacheKey;
+                    if (isEdit) {
+                        item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-amber-500 to-orange-600 border-2 border-white text-white font-extrabold text-[11px] sm:text-xs px-3 py-1 rounded-full text-outline-sm whitespace-nowrap shadow-xl z-20 animate-pulse';
+                        item.el.innerHTML = `🏗️ แตะย้าย ${pen.name}`;
+                    } else {
+                        const isFull = info.isFull;
+                        const bgClass = isFull 
+                            ? 'bg-gradient-to-r from-red-600 to-rose-700 border-2 border-white' 
+                            : 'bg-gradient-to-r from-[#2f9e44] to-[#2b8a3e] border-2 border-[#d3f9d8]';
+                        item.el.className = `btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 ${bgClass} text-white font-extrabold text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-xl z-20`;
+                        item.el.innerHTML = `
+                            <span>${pen.name} (${info.count}/${info.capacity})</span>
+                            <button onclick="event.stopPropagation(); upgradePenCapacity('${pen.id}')" class="ml-1 bg-yellow-400 hover:bg-yellow-300 text-amber-950 px-1.5 py-0.2 rounded-md text-[10px] font-black shadow">ขยาย</button>
+                        `;
+                    }
                 }
 
-                const worldPos = new THREE.Vector3();
-                ent.group.getWorldPosition(worldPos);
-                worldPos.y += ent.labelHeight || 2.6;
+                ent.group.getWorldPosition(_sharedLabelVec);
+                _sharedLabelVec.y += ent.labelHeight || 2.6;
 
-                const projected = worldPos.project(camera);
-                if (projected.z > 1) {
+                _sharedLabelVec.project(camera);
+                if (_sharedLabelVec.z > 1) {
                     item.el.style.display = 'none';
                     return;
                 }
                 item.el.style.display = 'flex';
-                const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
-                const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+                const x = (_sharedLabelVec.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-_sharedLabelVec.y * 0.5 + 0.5) * window.innerHeight;
                 item.el.style.left = x + 'px';
                 item.el.style.top = y + 'px';
             });
@@ -5040,7 +5190,13 @@
 
         function rebuildPlotVisual(plot) {
             while (plot.cropGroup.children.length > 0) {
-                plot.cropGroup.remove(plot.cropGroup.children[0]);
+                const child = plot.cropGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                    else child.material.dispose();
+                }
+                plot.cropGroup.remove(child);
             }
             if (plot.state === 'empty') return;
 
@@ -5322,7 +5478,6 @@
         }
 
         function buildSinglePen3D(penId) {
-            if (farmEntities[penId]) return;
             const penConf = PEN_TEMPLATES[penId];
             if (!penConf) return;
             const penData = state.pens[penId] || {
@@ -5336,6 +5491,14 @@
                 w: penConf.w,
                 d: penConf.d
             };
+
+            if (farmEntities[penId]) {
+                if (farmEntities[penId].group) {
+                    farmEntities[penId].group.position.set(penData.x, 0, penData.z);
+                    farmEntities[penId].group.rotation.y = penData.rot || 0;
+                }
+                return;
+            }
 
             const fenceMat = new THREE.MeshLambertMaterial({ color: 0x8c5527 });
             const woodDarkMat = new THREE.MeshLambertMaterial({ color: 0x542c0d });
@@ -5492,6 +5655,34 @@
                 });
             }
 
+            // Remove any animal meshes whose animal is no longer in state
+            const currentAnimalIds = new Set((state.animals || []).map(a => a.id));
+            Object.keys(animalMeshMap).forEach(id => {
+                if (!currentAnimalIds.has(id)) {
+                    const item = animalMeshMap[id];
+                    if (item && item.group) {
+                        if (item.group.parent) item.group.parent.remove(item.group);
+                        item.group.traverse(child => {
+                            if (child.geometry) child.geometry.dispose();
+                            if (child.material) {
+                                if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                                else child.material.dispose();
+                            }
+                        });
+                    }
+                    delete animalMeshMap[id];
+                }
+            });
+
+            // Remove orphaned animalWorldLabels
+            for (let i = animalWorldLabels.length - 1; i >= 0; i--) {
+                const item = animalWorldLabels[i];
+                if (!currentAnimalIds.has(item.animalId)) {
+                    if (item.el && item.el.parentNode) item.el.parentNode.removeChild(item.el);
+                    animalWorldLabels.splice(i, 1);
+                }
+            }
+
             // Spawn all animals in state
             if (state.animals && Array.isArray(state.animals)) {
                 state.animals.forEach(a => {
@@ -5501,6 +5692,7 @@
         }
 
         function spawnSingle3dAnimal(animal, customPos) {
+            if (animalMeshMap[animal.id]) return;
             const animalGroup = new THREE.Group();
             let phase = Math.random() * Math.PI * 2;
             let headMesh = null;
@@ -5858,33 +6050,35 @@
                     return;
                 }
 
-                if (a.status === 'ready') {
-                    const iconMap = { milk: '🥛', egg: '🥚', wool: '🧶', bacon: '🥓' };
-                    item.el.innerHTML = `${iconMap[a.product] || '✨'} เก็บผลผลิต!`;
-                    item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-green-500 to-emerald-600 border-2 border-white text-white font-extrabold text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-xl animate-pulse-glow z-20';
-                    item.el.style.display = 'block';
-                } else if (a.status === 'hungry') {
-                    item.el.innerHTML = `🌾 ให้อาหาร`;
-                    item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-amber-500 to-orange-600 border-2 border-[#fff5d6] text-white font-extrabold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-lg z-20';
-                    item.el.style.display = 'block';
-                } else if (a.status === 'producing') {
-                    item.el.innerHTML = `⏳ ${String(a.timer).padStart(2, '0')}s`;
-                    item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-[#0e3f6e]/85 border-2 border-[#6ce2ff] text-white font-extrabold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-md z-20';
-                    item.el.style.display = 'block';
+                const timerSec = a.status === 'producing' ? a.timer : 0;
+                const cacheKey = `${a.status}_${timerSec}_${a.product}`;
+
+                if (item.lastCacheKey !== cacheKey) {
+                    item.lastCacheKey = cacheKey;
+                    if (a.status === 'ready') {
+                        const iconMap = { milk: '🥛', egg: '🥚', wool: '🧶', bacon: '🥓' };
+                        item.el.innerHTML = `${iconMap[a.product] || '✨'} เก็บผลผลิต!`;
+                        item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-green-500 to-emerald-600 border-2 border-white text-white font-extrabold text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-xl animate-pulse-glow z-20';
+                    } else if (a.status === 'hungry') {
+                        item.el.innerHTML = `🌾 ให้อาหาร`;
+                        item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-amber-500 to-orange-600 border-2 border-[#fff5d6] text-white font-extrabold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-lg z-20';
+                    } else if (a.status === 'producing') {
+                        item.el.innerHTML = `⏳ ${String(a.timer).padStart(2, '0')}s`;
+                        item.el.className = 'btn-3d pointer-events-auto absolute transform -translate-x-1/2 -translate-y-1/2 bg-[#0e3f6e]/85 border-2 border-[#6ce2ff] text-white font-extrabold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full text-outline-sm whitespace-nowrap shadow-md z-20';
+                    }
                 }
 
-                const worldPos = new THREE.Vector3();
-                meshInfo.group.getWorldPosition(worldPos);
-                worldPos.y += (meshInfo.headBaseY || 0.8) + 0.85;
+                meshInfo.group.getWorldPosition(_sharedLabelVec);
+                _sharedLabelVec.y += (meshInfo.headBaseY || 0.8) + 0.85;
 
-                const projected = worldPos.project(camera);
-                if (projected.z > 1) {
+                _sharedLabelVec.project(camera);
+                if (_sharedLabelVec.z > 1) {
                     item.el.style.display = 'none';
                     return;
                 }
                 item.el.style.display = 'block';
-                const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
-                const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+                const x = (_sharedLabelVec.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-_sharedLabelVec.y * 0.5 + 0.5) * window.innerHeight;
                 item.el.style.left = x + 'px';
                 item.el.style.top = y + 'px';
             });
@@ -6202,21 +6396,23 @@
                     lbl.el.style.display = 'none';
                     return;
                 }
-                let pos = lbl.worldPos;
                 if (lbl.entityId && farmEntities[lbl.entityId]) {
-                    const wp = new THREE.Vector3();
-                    farmEntities[lbl.entityId].group.getWorldPosition(wp);
-                    wp.y += lbl.offsetY || 3.0;
-                    pos = wp;
+                    farmEntities[lbl.entityId].group.getWorldPosition(_sharedLabelVec);
+                    _sharedLabelVec.y += lbl.offsetY || 3.0;
+                } else if (lbl.worldPos) {
+                    _sharedLabelVec.copy(lbl.worldPos);
+                } else {
+                    lbl.el.style.display = 'none';
+                    return;
                 }
-                const projected = pos.clone().project(camera);
-                if (projected.z > 1) {
+                _sharedLabelVec.project(camera);
+                if (_sharedLabelVec.z > 1) {
                     lbl.el.style.display = 'none';
                     return;
                 }
                 lbl.el.style.display = 'block';
-                const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
-                const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+                const x = (_sharedLabelVec.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-_sharedLabelVec.y * 0.5 + 0.5) * window.innerHeight;
                 lbl.el.style.left = x + 'px';
                 lbl.el.style.top = y + 'px';
             });
@@ -6578,163 +6774,170 @@
         function animateLoop() {
             requestAnimationFrame(animateLoop);
 
-            if (windmillBlades) windmillBlades.rotation.z -= 0.02;
+            try {
+                if (windmillBlades) windmillBlades.rotation.z -= 0.02;
 
-            if (chimneySmokeGroup) {
-                const t = performance.now() * 0.002;
-                chimneySmokeGroup.children.forEach((puff, i) => {
-                    puff.position.y = ((t + i * 0.6) % 1.8);
-                    const s = 0.7 + puff.position.y * 0.45;
-                    puff.scale.set(s, s, s);
-                });
-            }
-
-            if (truckSmokeGroup) {
-                const tt = performance.now() * 0.0022;
-                truckSmokeGroup.children.forEach((puff, i) => {
-                    const prog = ((tt + i * 0.65) % 2.0);
-                    puff.position.y = prog * 0.9;
-                    const s = 0.5 + prog * 0.55;
-                    puff.scale.set(s, s, s);
-                    puff.position.x = Math.sin(tt * 2.5 + i) * 0.08;
-                    puff.position.z = Math.cos(tt * 2.0 + i) * 0.08;
-                });
-            }
-
-            if (bakerySmokeGroup) {
-                const bt = performance.now() * 0.002;
-                bakerySmokeGroup.children.forEach((puff, i) => {
-                    const prog = ((bt + i * 0.6) % 1.9);
-                    puff.position.y = prog * 0.85;
-                    const s = 0.45 + prog * 0.55;
-                    puff.scale.set(s, s, s);
-                    puff.position.x = Math.sin(bt * 2.2 + i) * 0.06;
-                    puff.position.z = Math.cos(bt * 1.8 + i) * 0.06;
-                });
-            }
-
-            if (bakeryFireGlow) {
-                bakeryFireGlow.material.opacity = 0.72 + Math.sin(performance.now() * 0.01) * 0.22;
-            }
-
-            if (petTailMesh) {
-                petTailMesh.rotation.z = Math.sin(performance.now() * 0.018) * 0.45;
-            }
-
-            // Livestock idling & harvesting hop animations
-            const animTime = performance.now() * 0.003;
-            Object.entries(animalMeshMap).forEach(([id, item]) => {
-                const a = state.animals.find(an => an.id === id);
-                const t = animTime + (item.phase || 0);
-                if (a && a.status === 'ready') {
-                    // Excited bounce when ready for collection
-                    item.group.position.y = item.baseY + Math.max(0, Math.sin(t * 4) * 0.22);
-                } else {
-                    item.group.position.y = item.baseY;
+                if (chimneySmokeGroup) {
+                    const t = performance.now() * 0.002;
+                    chimneySmokeGroup.children.forEach((puff, i) => {
+                        puff.position.y = ((t + i * 0.6) % 1.8);
+                        const s = 0.7 + puff.position.y * 0.45;
+                        puff.scale.set(s, s, s);
+                    });
                 }
 
-                if (item.head) {
-                    if (a && a.type === 'chicken') {
-                        item.head.rotation.z = Math.sin(t * 3.5) * 0.16;
+                if (truckSmokeGroup) {
+                    const tt = performance.now() * 0.0022;
+                    truckSmokeGroup.children.forEach((puff, i) => {
+                        const prog = ((tt + i * 0.65) % 2.0);
+                        puff.position.y = prog * 0.9;
+                        const s = 0.5 + prog * 0.55;
+                        puff.scale.set(s, s, s);
+                        puff.position.x = Math.sin(tt * 2.5 + i) * 0.08;
+                        puff.position.z = Math.cos(tt * 2.0 + i) * 0.08;
+                    });
+                }
+
+                if (bakerySmokeGroup) {
+                    const bt = performance.now() * 0.002;
+                    bakerySmokeGroup.children.forEach((puff, i) => {
+                        const prog = ((bt + i * 0.6) % 1.9);
+                        puff.position.y = prog * 0.85;
+                        const s = 0.45 + prog * 0.55;
+                        puff.scale.set(s, s, s);
+                        puff.position.x = Math.sin(bt * 2.2 + i) * 0.06;
+                        puff.position.z = Math.cos(bt * 1.8 + i) * 0.06;
+                    });
+                }
+
+                if (bakeryFireGlow) {
+                    bakeryFireGlow.material.opacity = 0.72 + Math.sin(performance.now() * 0.01) * 0.22;
+                }
+
+                if (petTailMesh) {
+                    petTailMesh.rotation.z = Math.sin(performance.now() * 0.018) * 0.45;
+                }
+
+                // Livestock idling & harvesting hop animations
+                const animTime = performance.now() * 0.003;
+                Object.entries(animalMeshMap).forEach(([id, item]) => {
+                    const a = state.animals.find(an => an.id === id);
+                    const t = animTime + (item.phase || 0);
+                    if (a && a.status === 'ready') {
+                        // Excited bounce when ready for collection
+                        item.group.position.y = item.baseY + Math.max(0, Math.sin(t * 4) * 0.22);
                     } else {
-                        item.head.rotation.x = Math.sin(t * 1.8) * 0.08;
+                        item.group.position.y = item.baseY;
+                    }
+
+                    if (item.head) {
+                        if (a && a.type === 'chicken') {
+                            item.head.rotation.z = Math.sin(t * 3.5) * 0.16;
+                        } else {
+                            item.head.rotation.x = Math.sin(t * 1.8) * 0.08;
+                        }
+                    }
+
+                    if (item.tail) {
+                        item.tail.rotation.z = Math.sin(t * 2.8) * 0.3;
+                    }
+                });
+
+                if (truckDriveTimer > 0) {
+                    truckDriveTimer--;
+                    truckGroup.position.z += truckDriveTimer > 60 ? 0.12 : -0.12;
+                    if (truckWheels && truckWheels.length > 0) {
+                        truckWheels.forEach(w => {
+                            w.rotation.x += truckDriveTimer > 60 ? 0.25 : -0.25;
+                        });
+                    }
+                } else if (truckGroup) {
+                    const baseZ = (state.buildings && state.buildings.truck && typeof state.buildings.truck.z === 'number') 
+                        ? state.buildings.truck.z 
+                        : 5.5;
+                    truckGroup.position.z = baseZ;
+                }
+
+                // Keyboard & Joystick movement
+                let moveX = joystickVec.x;
+                let moveZ = joystickVec.y;
+                if (keysDown['w'] || keysDown['arrowup']) moveZ -= 1;
+                if (keysDown['s'] || keysDown['arrowdown']) moveZ += 1;
+                if (keysDown['a'] || keysDown['arrowleft']) moveX -= 1;
+                if (keysDown['d'] || keysDown['arrowright']) moveX += 1;
+
+                if (Math.hypot(moveX, moveZ) > 0.1) {
+                    const forward = new THREE.Vector3(Math.sin(camAngle), 0, Math.cos(camAngle));
+                    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+                    playerTargetPos.copy(farmerGroup.position)
+                        .addScaledVector(right, moveX * 0.35)
+                        .addScaledVector(forward, moveZ * 0.35);
+                    const b = getIslandBounds(0.5);
+                    playerTargetPos.x = Math.max(b.minX, Math.min(b.maxX, playerTargetPos.x));
+                    playerTargetPos.z = Math.max(b.minZ, Math.min(b.maxZ, playerTargetPos.z));
+                }
+
+                const toTarget = playerTargetPos.clone().sub(farmerGroup.position);
+                if (toTarget.length() > 0.08) {
+                    const step = toTarget.normalize().multiplyScalar(0.11);
+                    farmerGroup.position.add(step);
+                    if (state.screenMode !== 'dressing') {
+                        farmerGroup.rotation.y = Math.atan2(step.x, step.z);
+                    }
+                    const swing = Math.sin(performance.now() * 0.015) * 0.55;
+                    farmerLeftLeg.rotation.x = swing;
+                    farmerRightLeg.rotation.x = -swing;
+                    if (farmerLeftArm && farmerRightArm) {
+                        farmerLeftArm.rotation.x = -swing * 0.8;
+                        farmerRightArm.rotation.x = state.wateringMode ? -0.6 : swing * 0.8;
+                    }
+                } else {
+                    farmerLeftLeg.rotation.x = 0;
+                    farmerRightLeg.rotation.x = 0;
+                    if (farmerLeftArm && farmerRightArm) {
+                        farmerLeftArm.rotation.x = 0;
+                        farmerRightArm.rotation.x = state.wateringMode ? -0.6 : 0;
                     }
                 }
 
-                if (item.tail) {
-                    item.tail.rotation.z = Math.sin(t * 2.8) * 0.3;
+                // Pet follows farmer smoothly
+                const petOffset = farmerGroup.position.clone().sub(petGroup.position);
+                if (petOffset.length() > 1.6) {
+                    const pStep = petOffset.normalize().multiplyScalar(0.09);
+                    petGroup.position.add(pStep);
+                    petGroup.rotation.y = Math.atan2(pStep.x, pStep.z);
                 }
-            });
 
-            if (truckDriveTimer > 0) {
-                truckDriveTimer--;
-                truckGroup.position.z += truckDriveTimer > 60 ? 0.12 : -0.12;
-                if (truckWheels && truckWheels.length > 0) {
-                    truckWheels.forEach(w => {
-                        w.rotation.x += truckDriveTimer > 60 ? 0.25 : -0.25;
-                    });
+                // Camera follow farmer across the island and all expansions
+                if (state.screenMode === 'island' && farmerGroup) {
+                    if (state.editLayoutMode && state.selectedMovableId && isDraggingEntity && editCandidatePos) {
+                        camTargetGoal.set(editCandidatePos.x, 0.8, editCandidatePos.z);
+                    } else {
+                        camTargetGoal.set(farmerGroup.position.x, 0.8, farmerGroup.position.z);
+                    }
                 }
-            } else if (truckGroup) {
-                truckGroup.position.z = 5.5;
-            }
 
-            // Keyboard & Joystick movement
-            let moveX = joystickVec.x;
-            let moveZ = joystickVec.y;
-            if (keysDown['w'] || keysDown['arrowup']) moveZ -= 1;
-            if (keysDown['s'] || keysDown['arrowdown']) moveZ += 1;
-            if (keysDown['a'] || keysDown['arrowleft']) moveX -= 1;
-            if (keysDown['d'] || keysDown['arrowright']) moveX += 1;
+                // Camera interpolation
+                camRadius += (camRadiusGoal - camRadius) * 0.08;
+                camAngle += (camAngleGoal - camAngle) * 0.08;
+                camTarget.lerp(camTargetGoal, 0.08);
 
-            if (Math.hypot(moveX, moveZ) > 0.1) {
-                const forward = new THREE.Vector3(Math.sin(camAngle), 0, Math.cos(camAngle));
-                const right = new THREE.Vector3(forward.z, 0, -forward.x);
-                playerTargetPos.copy(farmerGroup.position)
-                    .addScaledVector(right, moveX * 0.35)
-                    .addScaledVector(forward, moveZ * 0.35);
-                const b = getIslandBounds(0.5);
-                playerTargetPos.x = Math.max(b.minX, Math.min(b.maxX, playerTargetPos.x));
-                playerTargetPos.z = Math.max(b.minZ, Math.min(b.maxZ, playerTargetPos.z));
-            }
+                camera.position.x = camTarget.x + Math.sin(camAngle) * camRadius;
+                camera.position.z = camTarget.z + Math.cos(camAngle) * camRadius;
+                camera.position.y = camTarget.y + camRadius * 0.65;
+                camera.lookAt(camTarget);
 
-            const toTarget = playerTargetPos.clone().sub(farmerGroup.position);
-            if (toTarget.length() > 0.08) {
-                const step = toTarget.normalize().multiplyScalar(0.11);
-                farmerGroup.position.add(step);
-                if (state.screenMode !== 'dressing') {
-                    farmerGroup.rotation.y = Math.atan2(step.x, step.z);
+                if (dirLight && dirLight.target) {
+                    dirLight.position.set(camTarget.x + 22, 35, camTarget.z + 20);
+                    dirLight.target.position.set(camTarget.x, 0, camTarget.z);
+                    dirLight.target.updateMatrixWorld();
                 }
-                const swing = Math.sin(performance.now() * 0.015) * 0.55;
-                farmerLeftLeg.rotation.x = swing;
-                farmerRightLeg.rotation.x = -swing;
-                if (farmerLeftArm && farmerRightArm) {
-                    farmerLeftArm.rotation.x = -swing * 0.8;
-                    farmerRightArm.rotation.x = state.wateringMode ? -0.6 : swing * 0.8;
-                }
-            } else {
-                farmerLeftLeg.rotation.x = 0;
-                farmerRightLeg.rotation.x = 0;
-                if (farmerLeftArm && farmerRightArm) {
-                    farmerLeftArm.rotation.x = 0;
-                    farmerRightArm.rotation.x = state.wateringMode ? -0.6 : 0;
-                }
+
+                updateWorldLabels();
+                renderer.render(scene, camera);
+            } catch (err) {
+                console.error('Render loop error:', err);
             }
-
-            // Pet follows farmer smoothly
-            const petOffset = farmerGroup.position.clone().sub(petGroup.position);
-            if (petOffset.length() > 1.6) {
-                const pStep = petOffset.normalize().multiplyScalar(0.09);
-                petGroup.position.add(pStep);
-                petGroup.rotation.y = Math.atan2(pStep.x, pStep.z);
-            }
-
-            // Camera follow farmer across the island and all expansions
-            if (state.screenMode === 'island' && farmerGroup) {
-                if (state.editLayoutMode && state.selectedMovableId && isDraggingEntity && editCandidatePos) {
-                    camTargetGoal.set(editCandidatePos.x, 0.8, editCandidatePos.z);
-                } else {
-                    camTargetGoal.set(farmerGroup.position.x, 0.8, farmerGroup.position.z);
-                }
-            }
-
-            // Camera interpolation
-            camRadius += (camRadiusGoal - camRadius) * 0.08;
-            camAngle += (camAngleGoal - camAngle) * 0.08;
-            camTarget.lerp(camTargetGoal, 0.08);
-
-            camera.position.x = camTarget.x + Math.sin(camAngle) * camRadius;
-            camera.position.z = camTarget.z + Math.cos(camAngle) * camRadius;
-            camera.position.y = camTarget.y + camRadius * 0.65;
-            camera.lookAt(camTarget);
-
-            if (dirLight && dirLight.target) {
-                dirLight.position.set(camTarget.x + 22, 35, camTarget.z + 20);
-                dirLight.target.position.set(camTarget.x, 0, camTarget.z);
-                dirLight.target.updateMatrixWorld();
-            }
-
-            updateWorldLabels();
-            renderer.render(scene, camera);
         }
 
         // Guaranteed zero-loss state persistence on tab close, reload, navigation or switch
@@ -6807,11 +7010,17 @@
             }
         }
 
-        window.onload = function () {
+        window.onload = async function () {
             initStaticIcons();
-            loadGameData();
+            await loadGameData();
             initThreeScene();
-            loadGameData();
+
+            // Re-apply loaded state to 3D entities now that scene & meshes exist
+            const raw = localStorage.getItem(DB_KEY) || sessionStorage.getItem(DB_KEY);
+            if (raw) {
+                try { applyGamePayload(JSON.parse(raw)); } catch(e){}
+            }
+
             initInputEvents();
             animateLoop();
             setInterval(updateAnimalTimers, 1000);

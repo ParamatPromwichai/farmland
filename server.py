@@ -41,7 +41,8 @@ class FarmServerHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == '/api/load':
+        path_clean = self.path.split('?')[0].rstrip('/')
+        if path_clean == '/api/load':
             if os.path.exists(SAVE_FILE):
                 try:
                     with open(SAVE_FILE, 'r', encoding='utf-8') as f:
@@ -64,7 +65,8 @@ class FarmServerHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if self.path == '/api/save':
+        path_clean = self.path.split('?')[0].rstrip('/')
+        if path_clean == '/api/save':
             try:
                 content_len = int(self.headers.get('Content-Length', 0))
                 body = self.rfile.read(content_len)
@@ -91,7 +93,7 @@ class FarmServerHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
                 return
 
-        if self.path == '/api/reset':
+        if path_clean == '/api/reset':
             if os.path.exists(SAVE_FILE):
                 try:
                     os.remove(SAVE_FILE)
