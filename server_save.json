@@ -1,22 +1,22 @@
 {
   "version": 4,
-  "savedAt": 1792182844567,
-  "level": 2,
-  "xp": 83,
-  "coins": 394,
-  "gems": 17,
+  "savedAt": 1792235734898,
+  "level": 18,
+  "xp": 88,
+  "coins": 2109,
+  "gems": 49,
   "inventory": {
-    "wheat": 6,
-    "corn": 12,
-    "tomato": 0,
-    "pumpkin": 0,
-    "carrot": 0,
-    "strawberry": 0,
+    "wheat": 30,
+    "corn": 1,
+    "tomato": 1,
+    "pumpkin": 2,
+    "carrot": 8,
+    "strawberry": 4,
     "milk": 0,
     "egg": 0,
     "wool": 0,
     "bacon": 0,
-    "bread": 1,
+    "bread": 0,
     "cow_feed": 0,
     "chicken_feed": 0,
     "sheep_feed": 0,
@@ -37,7 +37,7 @@
       "id": "barn",
       "name": "โรงนาสีแดง",
       "type": "barn",
-      "x": -9.5,
+      "x": -22.3,
       "z": -1,
       "rot": 0,
       "w": 5,
@@ -57,8 +57,8 @@
       "id": "bakery",
       "name": "เตาอบเบเกอรี่",
       "type": "bakery",
-      "x": 8,
-      "z": -2,
+      "x": 16,
+      "z": -8,
       "rot": 0,
       "w": 4,
       "d": 3.5
@@ -94,15 +94,150 @@
       "d": 6
     }
   },
-  "pens": {},
-  "animals": [],
+  "pens": {
+    "cow_pen": {
+      "id": "cow_pen",
+      "name": "🐮 คอกวัวโคนม",
+      "animalType": "cow",
+      "capacity": 7,
+      "x": -22.3,
+      "z": 7.5,
+      "rot": 0,
+      "w": 6.6,
+      "d": 5.2
+    },
+    "chicken_coop": {
+      "id": "chicken_coop",
+      "name": "🐔 เล้าไก่อารมณ์ดี",
+      "animalType": "chicken",
+      "capacity": 24,
+      "x": 20.8,
+      "z": 8,
+      "rot": 0,
+      "w": 6,
+      "d": 4.8
+    }
+  },
+  "animals": [
+    {
+      "id": "chicken_1792229336757",
+      "type": "chicken",
+      "name": "แม่ไก่กุ๊กไก่",
+      "pen": "chicken_coop",
+      "status": "ready",
+      "timer": 0,
+      "maxTimer": 20,
+      "product": "egg",
+      "feed": "corn",
+      "feedKey": "chicken_feed",
+      "xp": 12,
+      "coins": 20
+    },
+    {
+      "id": "cow_1792229338347",
+      "type": "cow",
+      "name": "แม่วัวเบลซี่",
+      "pen": "cow_pen",
+      "status": "ready",
+      "timer": 0,
+      "maxTimer": 30,
+      "product": "milk",
+      "feed": "wheat",
+      "feedKey": "cow_feed",
+      "xp": 20,
+      "coins": 35
+    },
+    {
+      "id": "cow_1792229339168",
+      "type": "cow",
+      "name": "แม่วัวเดซี่",
+      "pen": "cow_pen",
+      "status": "hungry",
+      "timer": 30,
+      "maxTimer": 30,
+      "product": "milk",
+      "feed": "wheat",
+      "feedKey": "cow_feed",
+      "xp": 20,
+      "coins": 35
+    },
+    {
+      "id": "chicken_1792229340225",
+      "type": "chicken",
+      "name": "แม่ไก่ชิกกี้",
+      "pen": "chicken_coop",
+      "status": "ready",
+      "timer": 0,
+      "maxTimer": 20,
+      "product": "egg",
+      "feed": "corn",
+      "feedKey": "chicken_feed",
+      "xp": 12,
+      "coins": 20
+    },
+    {
+      "id": "chicken_1792229340899",
+      "type": "chicken",
+      "name": "แม่ไก่โรซี่",
+      "pen": "chicken_coop",
+      "status": "ready",
+      "timer": 0,
+      "maxTimer": 20,
+      "product": "egg",
+      "feed": "corn",
+      "feedKey": "chicken_feed",
+      "xp": 12,
+      "coins": 20
+    },
+    {
+      "id": "chicken_1792233514698",
+      "type": "chicken",
+      "name": "แม่ไก่เพนนี่",
+      "pen": "chicken_coop",
+      "status": "hungry",
+      "timer": 20,
+      "maxTimer": 20,
+      "product": "egg",
+      "feed": "corn",
+      "feedKey": "chicken_feed",
+      "xp": 12,
+      "coins": 20
+    },
+    {
+      "id": "chicken_1792233514846",
+      "type": "chicken",
+      "name": "แม่ไก่ทับทิม",
+      "pen": "chicken_coop",
+      "status": "hungry",
+      "timer": 20,
+      "maxTimer": 20,
+      "product": "egg",
+      "feed": "corn",
+      "feedKey": "chicken_feed",
+      "xp": 12,
+      "coins": 20
+    },
+    {
+      "id": "chicken_1792233514990",
+      "type": "chicken",
+      "name": "แม่ไก่ทองคำ",
+      "pen": "chicken_coop",
+      "status": "hungry",
+      "timer": 20,
+      "maxTimer": 20,
+      "product": "egg",
+      "feed": "corn",
+      "feedKey": "chicken_feed",
+      "xp": 12,
+      "coins": 20
+    }
+  ],
   "expansions": {
     "east_meadow": {
       "unlocked": true
     },
     "west_pasture": {
-      "id": "west_pasture",
-      "unlocked": false
+      "unlocked": true
     },
     "north_river": {
       "id": "north_river",
@@ -117,7 +252,7 @@
     {
       "index": 0,
       "state": "empty",
-      "cropType": "wheat",
+      "cropType": "strawberry",
       "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
@@ -126,7 +261,7 @@
     {
       "index": 1,
       "state": "empty",
-      "cropType": "corn",
+      "cropType": "strawberry",
       "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
@@ -144,7 +279,7 @@
     {
       "index": 3,
       "state": "empty",
-      "cropType": "corn",
+      "cropType": "wheat",
       "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
@@ -162,7 +297,7 @@
     {
       "index": 5,
       "state": "empty",
-      "cropType": "corn",
+      "cropType": "wheat",
       "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
@@ -207,7 +342,7 @@
     {
       "index": 10,
       "state": "empty",
-      "cropType": "corn",
+      "cropType": "wheat",
       "progress": 0,
       "plantedAt": 0,
       "readyAt": 0,
@@ -226,30 +361,30 @@
   "orders": [
     {
       "id": 1,
-      "item1": "wheat",
-      "qty1": 3,
+      "item1": "tomato",
+      "qty1": 2,
       "item2": "wheat",
-      "qty2": 0,
-      "coins": 45,
-      "xp": 15
+      "qty2": 2,
+      "coins": 164,
+      "xp": 52
     },
     {
       "id": 2,
       "item1": "corn",
       "qty1": 2,
-      "item2": "corn",
-      "qty2": 0,
-      "coins": 50,
-      "xp": 18
+      "item2": "egg",
+      "qty2": 1,
+      "coins": 74,
+      "xp": 24
     },
     {
       "id": 3,
-      "item1": "wheat",
+      "item1": "carrot",
       "qty1": 2,
-      "item2": "corn",
+      "item2": "milk",
       "qty2": 1,
-      "coins": 60,
-      "xp": 20
+      "coins": 142,
+      "xp": 45
     },
     {
       "id": 4,
@@ -262,21 +397,21 @@
     },
     {
       "id": 5,
-      "item1": "corn",
-      "qty1": 3,
-      "item2": "wheat",
+      "item1": "wheat",
+      "qty1": 2,
+      "item2": "bread",
       "qty2": 1,
-      "coins": 65,
-      "xp": 22
+      "coins": 86,
+      "xp": 28
     },
     {
       "id": 6,
-      "item1": "bread",
+      "item1": "milk",
       "qty1": 1,
-      "item2": "corn",
+      "item2": "carrot",
       "qty2": 2,
-      "coins": 90,
-      "xp": 26
+      "coins": 142,
+      "xp": 45
     }
   ],
   "bakeryQueue": [

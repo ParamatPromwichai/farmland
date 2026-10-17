@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cozy-hay-farm-v2';
+const CACHE_NAME = 'cozy-hay-farm-v8';
 const CORE_ASSETS = [
     './',
     './index.html',
@@ -39,8 +39,26 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Only cache GET requests
+    // Only handle GET requests
     if (event.request.method !== 'GET') {
+        return;
+    }
+
+    // Network-First for page navigation (HTML) so code updates are immediate
+    if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+        event.respondWith(
+            fetch(event.request).then(networkResponse => {
+                if (networkResponse && networkResponse.status === 200) {
+                    const responseClone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(event.request, responseClone);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                return caches.match('./index.html') || caches.match('./');
+            })
+        );
         return;
     }
 
